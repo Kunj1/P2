@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Code Analyzer</title>
+    <link rel="stylesheet" href="../static/output.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body class="bg-gradient-to-tr from-fuchsia-700 to-pink-600">
+    <div class="flex text-center items-center p-6 gap-6 flex-row min-h-screen ">
+        <div class="flex flex-col">
+            <h2>Result:</h2>
+            <div class="flex items-start p-2 w-[18vw] overflow-scroll h-[88vh] max-w-screen-xl border-zinc-300 rounded-lg border-dashed border-2 ">
+                <div class="w-[90vw] text-wrap p-1 grid grid-cols-1" id="result">
+                </div>
+            </div>
+        </div>
+        <div class="w-[45vw] h-[95vh] max-w-screen-xl border-zinc-300 rounded-lg border-dashed border-2 overflow-y-auto relative" id="logicflow">
+            <canvas class="h-[95vh] w-[45vw]" id="playground"></canvas>
+        </div>
+        <form class="form-container flex  h-[90vh] flex-col w-[35vw] max-w-md bg-slate-300/40 backdrop-blur-lg p-2 rounded-xl shadow-lg " id="codeForm">
+            <textarea class="textarea placeholder:text-gray-800 h-[85vh]  bg-slate-300/40 rounded-lg shadow w-full max-w-md" name="code" id="code" rows="10" cols="50" placeholder="Enter your Python code here..."></textarea><br>
+            <div class="grid grid-cols-2">
+                <button class="px-5 py-2 rounded-md hover:bg-gradient-to-l bg-gradient-to-r from text-white  mx-auto " type="submit">Analyze</button>
+                <button class="px-5 py-2 rounded-md hover:bg-gradient-to-l bg-gradient-to-r from text-white  mx-auto " type="button" id="resetBtn">Reset</button>
+            </div>
+        </form>
+    </div>
+    <script>
+        let previousCode = '';
+        let previousResult = '';
+        let currentY = 10;  // Initialize the current vertical position for dropped cards
+
+        $('#resetBtn').click(function() {
+            previousCode = $('#code').val(); // Store the current code
+            previousResult = $('#result').html(); // Store the current result
+            $('#code').val(''); // Clear the textarea
+            $('#result').html(''); // Clear the result container
+            $('#undoBtn').prop('disabled', false); // Enable the undo button
+        });
+
+        function createCard(content) {
+            console.log('Creating card with content:', content);
+
+            // Check if content is an object
+            if (typeof content !== 'object' || content === null) {
+                console.error('Invalid content data:', content);
+                return;
+            }
+
+            // Check if required properties exist
+            const requiredProperties = ['Type', 'name', 'Contents'];
+            const missingProperties = requiredProperties.filter(prop => !(prop in content));
+            if (missingProperties.length > 0) {
+                console.error(`Missing properties in content data: ${missingProperties.join(', ')}`);
+                return;
+            }
+
+            const card = document.createElement('div');
+            card.className = 'bg-slate-300/40 p-6 m-2 relative rounded-xl hover:shadow-lg shadow cursor-pointer';
+            card.draggable = true;
+            card.id = `card-${content.name}`;
+
+            const type = document.createElement('h1');
+            type.textContent = `Type: ${content.Type}`;
+            type.className = 'text-base font-bold mb-2';
+            card.appendChild(type);
+
+            const name = document.createElement('h1');
+            name.textContent = `Name: ${content.name}`;
+            name.className = 'text-base font-bold mb-2';
+            card.appendChild(name);
+
+            const handlecontents = document.createElement('button');
+            handlecontents.textContent = `Content`;
+            handlecontents.className = 'h-[6vh] w-[8vw] shadow rounded-md hover:shadow-xl border border-gray-700';
+            card.appendChild(handlecontents);
+
+            handlecontents.onclick = function() {
+                // Check if the contents are already displayed
+                let existingContents = card.querySelector('.text-wrap');
+                if (existingContents) {
+                    // If contents exist, remove them
+                    card.removeChild(existingContents);
+                } else {
+                    // If contents don't exist, create and append them
+                    const contents = document.createElement('pre');
+                    contents.className = 'text-wrap';
+                    contents.textContent = `Contents: \n${content.Contents}`;
+                    card.appendChild(contents);
+                }
+            };
+
+            card.addEventListener('dragstart', handleDragStart);
+
+            return card;
+        }
+
+        function handleDragStart(e) {
+            e.dataTransfer.setData('text/plain', e.target.id);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const cardId = e.dataTransfer.getData('text/plain');
+            const droppedCard = document.getElementById(cardId);
+
+            if (droppedCard) {
+                const logicflow = document.getElementById('logicflow');
+                droppedCard.style.position = 'absolute';
+                droppedCard.style.left = '10px';  // Align cards to the left with a small padding
+                droppedCard.style.top = `${currentY}px`;
+                currentY += droppedCard.offsetHeight + 10;  // Update the vertical position for the next card
+
+                if (currentY > logicflow.offsetHeight - droppedCard.offsetHeight) {
+                    // Reset currentY if it exceeds the container height to avoid overflow
+                    currentY = 10;
+                }
+                logicflow.appendChild(droppedCard);
+            }
+        }
+
+        $(document).ready(function() {
+            $('#codeForm').on('submit', function(event) {
+                event.preventDefault();
+                var code = $('#code').val();
+                $.ajax({
+                    url: '/analyze',
+                    type: 'POST',
+                    data: { code: code },
+                    success: function(data) {
+                        handleAnalysisResult(data.result);
+                    },
+                    error: function(xhr, status, error) {
+                        $('#result').text('Error: ' + xhr.responseText);
+                    }
+                });
+            });
+
+            document.getElementById('logicflow').addEventListener('dragover', handleDragOver);
+            document.getElementById('logicflow').addEventListener('drop', handleDrop);
+        });
+
+        function handleAnalysisResult(resultData) {
+            const container = document.getElementById('result');
+            container.innerHTML = ''; // Clear the previous result
+
+            if (!resultData || Object.keys(resultData).length === 0) {
+                console.error('Result data is empty or invalid:', resultData);
+                return;
+            }
+
+            Object.keys(resultData).forEach(key => {
+                const content = resultData[key];
+                const card = createCard(content);
+                if (card) {
+                    container.appendChild(card);
+                }
+            });
+        }
+    </script>
+</body>
+</html>

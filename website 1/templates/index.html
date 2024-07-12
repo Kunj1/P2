@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KawniX Flow</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>KawniX Flow</h1>
+        </header>
+        <main>
+            <div id="chat-container">
+                <textarea id="prompt" placeholder="Enter your prompt..."></textarea>
+                <button id="generate"><i class="fas fa-paper-plane"></i> Generate Code</button>
+                <div id="output">
+                    <pre id="output-text" class="fade-in"></pre>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script>
+        document.getElementById('generate').addEventListener('click', async () => {
+            const prompt = document.getElementById('prompt').value;
+
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt }),
+            });
+
+            const data = await response.json();
+
+            const outputDiv = document.getElementById('output-text');
+            outputDiv.innerHTML = data.code || 'No code generated';
+            outputDiv.classList.add('fade-in');
+
+            document.getElementById('analyze').addEventListener('click', () => {
+                const encodedCode = encodeURIComponent(data.code);
+                const analyzeUrl = `https://code-analyzer-website.com/analyze?code=${encodedCode}`;
+                window.location.href = analyzeUrl;
+            });
+        });
+    </script>
+</body>
+</html>

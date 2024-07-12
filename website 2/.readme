@@ -1,0 +1,149 @@
+Steps to install and run the project on your localhost.
+
+1. Fork the repository.
+2. run the command 'npm i ' in one terminal.  
+3. then run the command 'python app.py' in one terminal. 
+4. open a seperate terminal and run the command 'npx tailwindcss -i ./static/main.css -o ./static/output.css --watch'. 
+
+
+1. run the given sample code on the web page:
+
+    import pandas as pd
+    import torch
+    from transformers import T5Tokenizer, T5ForConditionalGeneration
+    from torch.utils.data import DataLoader, Dataset
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import accuracy_score
+    from transformers import AdamW
+    from tqdm import tqdm
+    
+    # Load the dataset
+    df = pd.read_csv("Book1.csv")
+    
+    # Check unique labels in the dataset
+    unique_labels = df['label'].unique()
+    num_labels = len(unique_labels)
+    print("Number of unique labels:", num_labels)
+    print("Unique labels:", unique_labels)
+    
+    # Verify label range
+    expected_labels = set(range(num_labels))
+    if set(unique_labels) != expected_labels:
+        print("Error: Labels are not within the expected range.")
+        # You may need to fix the labels in your dataset.
+    
+    # Verify label encoding
+    if df['label'].isnull().sum() > 0:
+        print("Error: There are missing values in the label column.")
+        # You may need to handle missing values in your dataset.
+    
+    # Split dataset into training and validation sets
+    train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
+    
+    # Define dataset class
+    class CustomDataset(Dataset):
+        def __init__(self, dataframe, tokenizer, max_length=128):
+            self.tokenizer = tokenizer
+            self.data = dataframe
+            self.max_length = max_length
+    
+        def __len__(self):
+            return len(self.data)
+    
+        def __getitem__(self, idx):
+            text = str(self.data.iloc[idx]['text'])
+            label = self.data.iloc[idx]['label']
+    
+            inputs = self.tokenizer.encode_plus(
+                text,
+                max_length=self.max_length,
+                padding='max_length',
+                truncation=True,
+                return_tensors='pt'
+            )
+    
+            return {
+                'input_ids': inputs['input_ids'].flatten(),
+                'attention_mask': inputs['attention_mask'].flatten(),
+                'labels': torch.tensor(label, dtype=torch.long)
+            }
+    
+    # Initialize the tokenizer and model
+    tokenizer = T5Tokenizer.from_pretrained('t5-large')
+    model = T5ForConditionalGeneration.from_pretrained('t5-large')
+    
+    # Define training parameters
+    batch_size = 4
+    epochs = 3
+    learning_rate = 2e-5
+    
+    # Create DataLoader for training and validation sets
+    train_dataset = CustomDataset(train_df, tokenizer)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    
+    val_dataset = CustomDataset(val_df, tokenizer)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    
+    # Define optimizer and loss function
+    optimizer = AdamW(model.parameters(), lr=learning_rate)
+    criterion = torch.nn.CrossEntropyLoss()
+    
+    # Training loop
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+    
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0
+        for batch in tqdm(train_loader, desc=f'Epoch {epoch + 1}/{epochs}', unit='batches'):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
+    
+            optimizer.zero_grad()
+    
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+            total_loss += loss.item()
+    
+            loss.backward()
+            optimizer.step()
+    
+        average_train_loss = total_loss / len(train_loader)
+        print(f'Training Loss: {average_train_loss}')
+    
+        # Validation loop
+        model.eval()
+        val_predictions = []
+        val_targets = []
+    
+        with torch.no_grad():
+            for batch in tqdm(val_loader, desc=f'Validation', unit='batches'):
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
+    
+                outputs = model.generate(input_ids=input_ids, attention_mask=attention_mask, max_length=1)
+                preds = torch.argmax(outputs, dim=2).squeeze()
+    
+                val_predictions.extend(preds.cpu().numpy())
+                val_targets.extend(labels.cpu().numpy())
+    
+        val_accuracy = accuracy_score(val_targets, val_predictions)
+        print(f'Validation Accuracy: {val_accuracy}')
+    
+    # Define the directory path where you want to save the model
+    save_directory = "./saved_model_t5"
+    
+    # Create the directory if it doesn't exist
+    import os
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
+    
+    # Save the model and tokenizer
+    model.save_pretrained(save_directory)
+    tokenizer.save_pretrained(save_directory)
+    
+    print("Model saved successfully!") 
+    
+2.  Card drag and drop functionality has been implemented. Might need more testing to find bugs.
